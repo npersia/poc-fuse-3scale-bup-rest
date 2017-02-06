@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
+  xmlns:ext="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.5.0"
+  xmlns:cxf="http://camel.apache.org/schema/blueprint/cxf"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+    http://www.osgi.org/xmlns/blueprint/v1.0.0 http://www.osgi.org/xmlns/blueprint/v1.0.0/blueprint.xsd
+    http://camel.apache.org/schema/blueprint http://camel.apache.org/schema/blueprint/camel-blueprint.xsd
+    http://camel.apache.org/schema/blueprint/cxf http://camel.apache.org/schema/blueprint/cxf/camel-cxf.xsd
+  ">
+  <!-- OSGI blueprint property placeholder -->
+  <ext:property-placeholder evaluator="semperti">
+    <!-- list some properties for this test -->
+    <ext:default-properties>
+      <ext:property name="BUP_SERVICE_HOST" value="bup"/>
+      <ext:property name="BUP_SERVICE_PORT" value="3306"/>
+      <ext:property name="BUP_DATABASE" value="bup"/>
+      <ext:property name="BUP_USER" value="bup"/>
+      <ext:property name="BUP_PASSWORD" value="bup"/>
+      <ext:property name="ENDPOINT_ADDRESS" value="/"/>
+    </ext:default-properties>
+  </ext:property-placeholder>
+
+  <!-- XXX: ver como crear los 404 personalizados -->
+  <cxf:rsServer address="${ENDPOINT_ADDRESS}" id="serverEndpoint" serviceClass="com.semperti.hipotecario.poc.fuse.model.BupRestService">
+    <cxf:providers>
+      <bean class="com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider"/>
+    </cxf:providers>
+  </cxf:rsServer>
+  <bean class="com.semperti.hipotecario.poc.fuse.util.ExceptionHandler" id="exceptionHandler"/>
+
+  <bean class="com.semperti.hipotecario.poc.fuse.util.DbAccess" factory-method="getInstance" id="dbAccess">
+    <property name="db" ref="dataSourceMySQL"/>
+  </bean>
+
+  <bean class="com.semperti.hipotecario.poc.fuse.service.BupRestServiceImpl" id="processor"/>
+
+  <bean class="org.apache.commons.dbcp.BasicDataSource" id="dataSourceMySQL" destroy-method="close">
+    <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+    <property name="url" value="jdbc:mysql://${service:BUP}/${BUP_DATABASE}"/>
+    <property name="username" value="${BUP_USER}"/>
+    <property name="password" value="${BUP_PASSWORD}"/>
+  </bean>
+
+  <camelContext autoStartup="true" xmlns="http://camel.apache.org/schema/blueprint">
+    <onException>
+      <exception>java.lang.Exception</exception>
+      <handled>
+        <constant>true</constant>
+      </handled>
+      <to uri="bean:exceptionHandler"/>
+    </onException>
+
+    <route id="mainRoute">
+      <from uri="cxfrs:bean:serverEndpoint"/>
+      <to uri="log:body?level=INFO"/>
+      <recipientList>
+        <simple>bean:processor?method=${header.operationName}</simple>
+      </recipientList>
+      <to uri="log:body?level=INFO" />
+    </route>
+  </camelContext>
+</blueprint>
